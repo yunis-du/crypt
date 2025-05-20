@@ -3,14 +3,13 @@ package config
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 
-	"github.com/sagikazarmark/crypt/backend"
-	"github.com/sagikazarmark/crypt/backend/consul"
-	"github.com/sagikazarmark/crypt/backend/etcd"
-	"github.com/sagikazarmark/crypt/backend/firestore"
-	"github.com/sagikazarmark/crypt/backend/natskv"
-	"github.com/sagikazarmark/crypt/encoding/secconf"
+	"github.com/yunis-du/crypt/backend"
+	"github.com/yunis-du/crypt/backend/consul"
+	"github.com/yunis-du/crypt/backend/etcd"
+	"github.com/yunis-du/crypt/backend/firestore"
+	"github.com/yunis-du/crypt/backend/natskv"
+	"github.com/yunis-du/crypt/encoding/secconf"
 	goetcdv2 "go.etcd.io/etcd/client/v2"
 	goetcdv3 "go.etcd.io/etcd/client/v3"
 )
@@ -43,7 +42,7 @@ func NewStandardConfigManager(client backend.Store) (ConfigManager, error) {
 }
 
 func NewConfigManager(client backend.Store, keystore io.Reader) (ConfigManager, error) {
-	bytes, err := ioutil.ReadAll(keystore)
+	bytes, err := io.ReadAll(keystore)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +64,7 @@ func NewStandardEtcdConfigManager(machines []string) (ConfigManager, error) {
 		Endpoints: machines,
 	})
 }
+
 // NewStandardEtcdConfigManagerFromConfig returns a new ConfigManager backed by etcd.
 func NewStandardEtcdConfigManagerFromConfig(config goetcdv2.Config) (ConfigManager, error) {
 	store, err := etcd.NewFromV2Config(config)
@@ -94,7 +94,7 @@ func NewStandardEtcdV3ConfigManagerFromConfig(config goetcdv3.Config) (ConfigMan
 
 // NewStandardConsulConfigManager returns a new ConfigManager backed by consul.
 func NewStandardConsulConfigManager(machines []string) (ConfigManager, error) {
-	store, err := consul.New(machines)
+	store, err := consul.New(machines, "")
 	if err != nil {
 		return nil, err
 	}
@@ -142,12 +142,12 @@ func NewEtcdV3ConfigManager(machines []string, keystore io.Reader) (ConfigManage
 
 // NewConsulConfigManager returns a new ConfigManager backed by consul.
 // Data will be encrypted.
-func NewConsulConfigManager(machines []string, keystore io.Reader) (ConfigManager, error) {
-	store, err := consul.New(machines)
+func NewConsulConfigManager(machines []string, token string) (ConfigManager, error) {
+	store, err := consul.New(machines, token)
 	if err != nil {
 		return nil, err
 	}
-	return NewConfigManager(store, keystore)
+	return NewStandardConfigManager(store)
 }
 
 // NewNatsConfigManager returns a new ConfigManager backed by NATS.
@@ -235,7 +235,7 @@ type Response struct {
 }
 
 func (c configManager) Watch(key string, stop chan bool) <-chan *Response {
-	resp := make(chan *Response, 0)
+	resp := make(chan *Response)
 	backendResp := c.store.Watch(key, stop)
 	go func() {
 		for {
@@ -256,7 +256,7 @@ func (c configManager) Watch(key string, stop chan bool) <-chan *Response {
 }
 
 func (c standardConfigManager) Watch(key string, stop chan bool) <-chan *Response {
-	resp := make(chan *Response, 0)
+	resp := make(chan *Response)
 	backendResp := c.store.Watch(key, stop)
 	go func() {
 		for {

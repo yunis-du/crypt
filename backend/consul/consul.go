@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/sagikazarmark/crypt/backend"
+	"github.com/yunis-du/crypt/backend"
 )
 
 type Client struct {
@@ -14,10 +14,13 @@ type Client struct {
 	waitIndex uint64
 }
 
-func New(machines []string) (*Client, error) {
+func New(machines []string, token string) (*Client, error) {
 	conf := api.DefaultConfig()
 	if len(machines) > 0 {
 		conf.Address = machines[0]
+	}
+	if len(token) > 0 {
+		conf.Token = token
 	}
 	client, err := api.NewClient(conf)
 	if err != nil {
@@ -32,7 +35,7 @@ func (c *Client) Get(key string) ([]byte, error) {
 		return nil, err
 	}
 	if kv == nil {
-		return nil, fmt.Errorf("Key ( %s ) was not found.", key)
+		return nil, fmt.Errorf("key ( %s ) was not found", key)
 	}
 	return kv.Value, nil
 }
@@ -42,10 +45,7 @@ func (c *Client) List(key string) (backend.KVPairs, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
-	ret := make(backend.KVPairs, len(pairs), len(pairs))
+	ret := make(backend.KVPairs, len(pairs))
 	for i, kv := range pairs {
 		ret[i] = &backend.KVPair{Key: kv.Key, Value: kv.Value}
 	}
@@ -63,7 +63,7 @@ func (c *Client) Set(key string, value []byte) error {
 }
 
 func (c *Client) Watch(key string, stop chan bool) <-chan *backend.Response {
-	respChan := make(chan *backend.Response, 0)
+	respChan := make(chan *backend.Response)
 	go func() {
 		for {
 			opts := api.QueryOptions{
@@ -71,15 +71,15 @@ func (c *Client) Watch(key string, stop chan bool) <-chan *backend.Response {
 			}
 			keypair, meta, err := c.client.Get(key, &opts)
 			if keypair == nil && err == nil {
-				err = fmt.Errorf("Key ( %s ) was not found.", key)
+				err = fmt.Errorf("key ( %s ) was not found", key)
 			}
 			if err != nil {
-				respChan <- &backend.Response{nil, err}
+				respChan <- &backend.Response{Value: nil, Error: err}
 				time.Sleep(time.Second * 5)
 				continue
 			}
 			c.waitIndex = meta.LastIndex
-			respChan <- &backend.Response{keypair.Value, nil}
+			respChan <- &backend.Response{Value: keypair.Value, Error: nil}
 		}
 	}()
 	return respChan
